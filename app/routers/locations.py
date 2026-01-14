@@ -116,18 +116,40 @@ async def delete_location(
     current_user: User = Depends(get_current_user)
 ):
 
-    loc = await db.get(LocationSeat, location_id)
-    if not loc:
-        raise HTTPException(status_code=404, detail="Not found")
+    stmt = select(LocationSeat).where(LocationSeat.id == location_id)
+    result = await db.execute(stmt)
+    location = result.scalar_one_or_none()
+
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
 
     is_admin = current_user.role_id == 1 
-    is_author = loc.author_id == current_user.id
+    is_author = location.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="You do not have permission to delete this location")
 
-    await db.delete(loc)
+
+    await db.delete(location)
     await db.commit()
+    
     return None
+
+@locations_router.get("/my", response_model=List[LocationSeatResponse])
+async def get_my_locations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    stmt = (
+        select(LocationSeat)
+        .options(
+            selectinload(LocationSeat.reviews),
+            selectinload(LocationSeat.pictures)
+        )
+        .where(LocationSeat.author_id == current_user.id)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
   

@@ -113,6 +113,7 @@ class StatusResponse(StatusBase):
 class LocationSeatResponse(LocationSeatBase):
     id: int
     
+    author_id: int
 
     reviews: List["ReviewResponse"] = [] 
     
