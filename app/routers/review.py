@@ -12,7 +12,6 @@ from app.pyd import schemas
 
 reviews_router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
-# --- 1. CREATE REVIEW (Создание) ---
 @reviews_router.post("/", response_model=schemas.ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def create_review(
     review_data: schemas.ReviewCreate,
@@ -67,8 +66,7 @@ async def create_review(
     return new_review
 
 
-# --- 2. GET MY REVIEWS (Мои отзывы) ---
-# ⚠️ ВАЖНО: Этот эндпоинт должен быть ВЫШЕ, чем get_review("/{review_id}")
+
 @reviews_router.get("/user/my", response_model=List[schemas.ReviewResponse])
 async def get_my_reviews(
     db: AsyncSession = Depends(get_db),
@@ -82,7 +80,7 @@ async def get_my_reviews(
     result = await db.execute(stmt)
     reviews = result.scalars().all()
 
-    # Проставляем location_id каждому отзыву вручную
+
     for r in reviews:
         if r.location_links:
             r.location_id = r.location_links[0].locations_id
@@ -90,7 +88,7 @@ async def get_my_reviews(
     return reviews
 
 
-# --- 3. GET SINGLE REVIEW (Один отзыв) ---
+
 @reviews_router.get("/{review_id}", response_model=schemas.ReviewResponse)
 async def get_review(
     review_id: int,
@@ -113,7 +111,7 @@ async def get_review(
     return review
 
 
-# --- 4. UPDATE REVIEW (Обновление) ---
+
 @reviews_router.patch("/{review_id}", response_model=schemas.ReviewResponse)
 async def update_review(
     review_id: int,
@@ -121,7 +119,7 @@ async def update_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Ищем отзыв
+
     stmt = (
         select(Review)
         .options(selectinload(Review.location_links))
@@ -133,15 +131,14 @@ async def update_review(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    # Проверка прав: автор или админ
-    # (Предполагаем, что у админа role_id=1. Если другое - поправь)
+
     is_admin = current_user.role_id == 1
     is_author = review.author_id == current_user.id
 
     if not (is_author or is_admin):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    # Обновляем поля
+
     update_data = review_update.model_dump(exclude_unset=True)
     
     for key, value in update_data.items():
@@ -150,14 +147,13 @@ async def update_review(
     await db.commit()
     await db.refresh(review)
 
-    # Восстанавливаем location_id для ответа
+
     if review.location_links:
         review.location_id = review.location_links[0].locations_id
 
     return review
 
 
-# --- 5. DELETE REVIEW (Удаление) ---
 @reviews_router.delete("/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_review(
     review_id: int,

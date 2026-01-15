@@ -2,4 +2,5 @@ venv/
 .env
 *__pycache__
 uploads
-migrations/versions/*
+app/migrations/versions/*
+!**/migrations/versions/__init__.py

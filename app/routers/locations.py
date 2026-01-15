@@ -74,12 +74,12 @@ async def create_location(
 
 @locations_router.get("/", response_model=List[LocationSeatResponse])
 async def get_locations(
-    # Фильтры для видимой области карты (Bounding Box)
+
     min_lat: Optional[Decimal] = None,
     max_lat: Optional[Decimal] = None,
     min_lon: Optional[Decimal] = None,
     max_lon: Optional[Decimal] = None,
-    # Твои старые фильтры
+
     type_id: Optional[int] = None,
     status_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db)
@@ -89,7 +89,7 @@ async def get_locations(
         selectinload(LocationSeat.pictures)
     )
 
-    # Логика "Квадрата": ищем точки внутри границ
+
     if min_lat and max_lat and min_lon and max_lon:
         query = query.where(
             LocationSeat.cord_x >= min_lat,
@@ -98,7 +98,7 @@ async def get_locations(
             LocationSeat.cord_y <= max_lon
         )
 
-    # Остальные фильтры
+
     if type_id:
         query = query.where(LocationSeat.type == type_id)
     if status_id:
@@ -182,7 +182,7 @@ async def update_location(
     current_user: User = Depends(get_current_user)
 ):
     """Обновить данные локации (только автор или админ)"""
-    # 1. Ищем локацию
+
     stmt = (
         select(LocationSeat)
         .options(
@@ -197,14 +197,14 @@ async def update_location(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    # 2. Проверка прав
+
     is_admin = getattr(current_user, 'role_id', None) == 1
     is_author = location.author_id == current_user.id
 
     if not (is_author or is_admin):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    # 3. Обновляем поля
+
     update_data = location_update.model_dump(exclude_unset=True)
     
     for key, value in update_data.items():
