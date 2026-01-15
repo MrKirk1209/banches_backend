@@ -16,31 +16,37 @@ class RoleBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 class LocationSeatBase(BaseModel):
     name: str = Field(min_length=1, max_length=255, example="Скамейка в парке")
-    description: str = Field(min_length=1, max_length=1000, example="Удобная скамейка с видом на озеро")
-    address: str = Field( min_length=1, max_length=500, example="ул. Пушкина, д. 10")
-    type: int = Field( gt=0, example=1)
-    cord_x: Decimal = Field(example=55.7558)
-    cord_y: Decimal = Field(example=37.6173)
-    status: int = Field(gt=0, example=1)
+    description: str = Field(min_length=1, max_length=1000, example="Описание")
+    address: str = Field(min_length=1, max_length=500, example="Адрес")
     
-    # Валидаторы для координат
+    # ID справочников должны быть положительными
+    type: int = Field(gt=0, example=1)
+    status: int = Field(gt=0, example=1)
+
+    # --- КООРДИНАТЫ ---
+
+    cord_x: Decimal = Field(example=55.7558, description="Широта (Latitude)")
+    cord_y: Decimal = Field(example=37.6173, description="Долгота (Longitude)")
+    
+    # --- ВАЛИДАТОРЫ (Разрешаем отрицательные) ---
+    
     @field_validator('cord_x')
     def validate_cord_x(cls, v):
-        if not -180 <= v <= 180:
-            raise ValueError('cord_x должен быть между -180 и 180')
+        # Широта (Latitude) бывает от -90 (Юг) до 90 (Север)
+        if v is not None and not -90 <= v <= 90:
+            raise ValueError('Широта (cord_x) должна быть между -90 и 90')
         return v
     
     @field_validator('cord_y')
     def validate_cord_y(cls, v):
-        if not -90 <= v <= 90:
-            raise ValueError('cord_y должен быть между -90 и 90')
+        # Долгота (Longitude) бывает от -180 (Запад) до 180 (Восток)
+        if v is not None and not -180 <= v <= 180:
+            raise ValueError('Долгота (cord_y) должна быть между -180 и 180')
         return v
     
     model_config = ConfigDict(
         from_attributes=True,
-        json_encoders={
-            Decimal: str,
-        }
+        json_encoders={Decimal: str}
     )
 
 class ReviewBase(BaseModel):
