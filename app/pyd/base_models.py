@@ -47,13 +47,12 @@ class ReviewBase(BaseModel):
     # Оценка от 1 до 5
     rate: int = Field(..., ge=1, le=5, example=4, description="Оценка от 1 до 5")
     
-
     pollution_id: int = Field(..., gt=0, example=1)
     condition_id: int = Field(..., gt=0, example=1)
     material_id: int = Field(..., gt=0, example=1)
     seating_positions: int = Field(..., gt=0, example=4)
     
-
+    # location_id лежит здесь, как основа
     location_id: Optional[int] = Field(None, gt=0, example=1)
     
     model_config = ConfigDict(from_attributes=True)

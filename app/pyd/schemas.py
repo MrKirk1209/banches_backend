@@ -42,16 +42,9 @@ class ReviewCreateNested(ReviewBase):
   
 
 class LocationSeatCreate(LocationSeatBase):
-    name: str = Field(min_length=1, max_length=255, example="Скамейка в парке")
-    description: str = Field(min_length=1, max_length=1000, example="Удобная скамейка с видом на озеро")
-    address: str = Field( min_length=1, max_length=500, example="ул. Пушкина, д. 10")
-    type: int = Field( gt=0, example=1)
-    cord_x: Decimal = Field(example=55.7558)
-    cord_y: Decimal = Field(example=37.6173)
-    status: int = Field(gt=0, example=1)
     first_review: Optional[ReviewCreateNested] = None
-    model_config = ConfigDict(from_attributes=True)
 
+    model_config = ConfigDict(from_attributes=True)
 class Token(BaseModel):
     """Схема для JWT токена"""
     access_token: str
@@ -125,3 +118,36 @@ class LocationSeatResponse(LocationSeatBase):
             Decimal: str  
         }
     )
+
+class ReviewUpdate(BaseModel):
+
+    rate: Optional[int] = Field(None, ge=1, le=5)
+    pollution_id: Optional[int] = Field(None, gt=0)
+    condition_id: Optional[int] = Field(None, gt=0)
+    material_id: Optional[int] = Field(None, gt=0)
+    seating_positions: Optional[int] = Field(None, gt=0)
+
+    model_config = ConfigDict(from_attributes=True)
+
+class LocationSeatUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=1000)
+    address: Optional[str] = Field(None, max_length=500)
+    type: Optional[int] = Field(None, gt=0)
+    status: Optional[int] = Field(None, gt=0)
+    cord_x: Optional[Decimal] = None
+    cord_y: Optional[Decimal] = None
+
+    @field_validator('cord_x')
+    def validate_cord_x(cls, v):
+        if v is not None and not -180 <= v <= 180:
+            raise ValueError('cord_x должен быть между -180 и 180')
+        return v
+    
+    @field_validator('cord_y')
+    def validate_cord_y(cls, v):
+        if v is not None and not -90 <= v <= 90:
+            raise ValueError('cord_y должен быть между -90 и 90')
+        return v
+
+    model_config = ConfigDict(from_attributes=True)

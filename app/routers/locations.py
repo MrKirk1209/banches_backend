@@ -5,7 +5,7 @@ from sqlalchemy import select
 from typing import List, Optional
 from decimal import Decimal
 from app.database import get_db
-from app.pyd.schemas import LocationSeatCreate, LocationSeatBase,LocationSeatResponse
+from app.pyd.schemas import LocationSeatCreate, LocationSeatBase,LocationSeatResponse,LocationSeatUpdate
 from app.pyd.base_models import LocationSeatBase
 from app.security import get_current_user
 from app.map.models import User,LocationSeat,Review,LocationSeatOfReview
@@ -152,4 +152,65 @@ async def get_my_locations(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-  
+@locations_router.get("/{location_id}", response_model=LocationSeatResponse)
+async def get_location_detail(
+    location_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить полную информацию о локации по ID (с отзывами и фото)"""
+    stmt = (
+        select(LocationSeat)
+        .options(
+            selectinload(LocationSeat.reviews),
+            selectinload(LocationSeat.pictures)
+        )
+        .where(LocationSeat.id == location_id)
+    )
+    result = await db.execute(stmt)
+    location = result.scalar_one_or_none()
+
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    
+    return location
+
+@locations_router.patch("/{location_id}", response_model=LocationSeatResponse)
+async def update_location(
+    location_id: int,
+    location_update: LocationSeatUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Обновить данные локации (только автор или админ)"""
+    # 1. Ищем локацию
+    stmt = (
+        select(LocationSeat)
+        .options(
+            selectinload(LocationSeat.reviews),
+            selectinload(LocationSeat.pictures)
+        )
+        .where(LocationSeat.id == location_id)
+    )
+    result = await db.execute(stmt)
+    location = result.scalar_one_or_none()
+
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    # 2. Проверка прав
+    is_admin = getattr(current_user, 'role_id', None) == 1
+    is_author = location.author_id == current_user.id
+
+    if not (is_author or is_admin):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    # 3. Обновляем поля
+    update_data = location_update.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(location, key, value)
+
+    await db.commit()
+    await db.refresh(location)
+    
+    return location
