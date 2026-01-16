@@ -83,9 +83,10 @@ class LocationSeat(Base):
     cord_y: Mapped[Decimal] = mapped_column(DECIMAL(20, 15))
     author_id: Mapped[int] = mapped_column(ForeignKey('Users.id'))
     status: Mapped[int] = mapped_column(ForeignKey('Statuses.id'))
-    review_id: Mapped[Optional[int]] = mapped_column(ForeignKey('Reviews.id'), nullable=True)
     
-    # Отношения
+    # ❌ review_id УДАЛЕН (он здесь не нужен при связи Many-to-Many)
+    
+    # --- Отношения ---
     author: Mapped['User'] = relationship(
         back_populates='locations',
         foreign_keys=[author_id]
@@ -98,20 +99,23 @@ class LocationSeat(Base):
         back_populates='locations',
         foreign_keys=[status]
     )
-# Связь многие-ко-многим с Review через промежуточную таблицу
+
+    # --- Связь с отзывами ---
+    # 1. Прямой доступ к списку отзывов (только для чтения)
     reviews: Mapped[List['Review']] = relationship(
         "Review",
         secondary='Location_seats_of_Reviews',
         back_populates='locations',
-        viewonly=True  # Только для чтения
+        viewonly=True 
     )
     
-    # Промежуточные записи для связи с Review
+    # 2. Доступ к промежуточным объектам (для добавления/удаления связей)
     review_links: Mapped[List['LocationSeatOfReview']] = relationship(
         "LocationSeatOfReview",
         back_populates='location',
         cascade="all, delete-orphan"
     )
+    
     pictures: Mapped[List['Picture']] = relationship(
         "Picture",
         back_populates='location',
@@ -120,6 +124,8 @@ class LocationSeat(Base):
 
     def __str__(self):
         return self.name
+
+    
 class Picture(Base):
     __tablename__ = 'Pictures' # Лучше назвать во множественном числе
     
@@ -212,15 +218,17 @@ class Review(Base):
         back_populates='reviews',
         foreign_keys=[material_id]
     )
-    # Связь многие-ко-многим с LocationSeat через промежуточную таблицу
+    
+    # --- Связь с локациями ---
+    # 1. Прямой доступ к списку локаций (только для чтения)
     locations: Mapped[List['LocationSeat']] = relationship(
         "LocationSeat",
         secondary='Location_seats_of_Reviews',
         back_populates='reviews',
-        viewonly=True  # Только для чтения
+        viewonly=True 
     )
     
-    # Промежуточные записи для связи с LocationSeat
+    # 2. Доступ к промежуточным объектам
     location_links: Mapped[List['LocationSeatOfReview']] = relationship(
         "LocationSeatOfReview",
         back_populates='review',
@@ -229,7 +237,6 @@ class Review(Base):
 
     def __str__(self):
         return f"Отзыв {self.id} (Оценка: {self.rate})"
-
 class LocationSeatOfReview(Base):
     __tablename__ = 'Location_seats_of_Reviews'
     
@@ -237,16 +244,18 @@ class LocationSeatOfReview(Base):
     locations_id: Mapped[int] = mapped_column(ForeignKey('Location_seats.id'))
     reviews_id: Mapped[int] = mapped_column(ForeignKey('Reviews.id'))
     
+    # Связи с объектами
     location: Mapped['LocationSeat'] = relationship(
-        back_populates='review_links',  # <-- matched to LocationSeat.review_links
+        back_populates='review_links',
         foreign_keys=[locations_id]
     )
     review: Mapped['Review'] = relationship(
-        back_populates='location_links',  # <-- matched to Review.location_links
+        back_populates='location_links',
         foreign_keys=[reviews_id]
     )
     
     __table_args__ = (
         UniqueConstraint('locations_id', 'reviews_id', name='unique_location_review'),
     )
+
 
