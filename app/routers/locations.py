@@ -11,7 +11,7 @@ from app.security import get_current_user
 from app.map.models import User,LocationSeat,Review,LocationSeatOfReview
 from sqlalchemy.orm import selectinload
 locations_router = APIRouter(prefix="/locations", tags=["Locations"])
-
+# cоздать локацию
 @locations_router.post("/", response_model=LocationSeatResponse, status_code=status.HTTP_201_CREATED)
 async def create_location(
     location_data: LocationSeatCreate,
@@ -71,7 +71,7 @@ async def create_location(
     full_location = result.scalar_one()
     
     return full_location
-
+# получить все локации
 @locations_router.get("/", response_model=List[LocationSeatResponse])
 async def get_locations(
 
@@ -108,7 +108,7 @@ async def get_locations(
     return result.scalars().all()
 
 
-    
+# удалить локацию
 @locations_router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_location(
     location_id: int,
@@ -134,7 +134,7 @@ async def delete_location(
     await db.commit()
     
     return None
-
+# получить мои локации
 @locations_router.get("/my", response_model=List[LocationSeatResponse])
 async def get_my_locations(
     db: AsyncSession = Depends(get_db),
@@ -173,7 +173,7 @@ async def get_location_detail(
         raise HTTPException(status_code=404, detail="Location not found")
     
     return location
-
+# обновить локацию
 @locations_router.patch("/{location_id}", response_model=LocationSeatResponse)
 async def update_location(
     location_id: int,

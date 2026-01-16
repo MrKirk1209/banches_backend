@@ -11,7 +11,7 @@ from app.map.models import User, Review, LocationSeat, LocationSeatOfReview
 from app.pyd import schemas
 
 reviews_router = APIRouter(prefix="/reviews", tags=["Reviews"])
-
+# cоздать обзор
 @reviews_router.post("/", response_model=schemas.ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def create_review(
     review_data: schemas.ReviewCreate,
@@ -65,8 +65,33 @@ async def create_review(
     new_review.location_id = location.id
     return new_review
 
+#вывести все обзоры по локации с пагинацией
+@reviews_router.get("/location/{location_id}", response_model=List[schemas.ReviewResponse])
+async def get_location_reviews(
+    location_id: int,
+    limit: int = 10, 
+    offset: int = 0,  
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = (
+        select(Review)
+        .options(selectinload(Review.location_links))
+        .join(LocationSeatOfReview, Review.id == LocationSeatOfReview.reviews_id)
+        .where(LocationSeatOfReview.locations_id == location_id)
+        .order_by(Review.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(stmt)
+    reviews = result.scalars().all()
+    
+    for r in reviews:
+        r.location_id = location_id
+        
+    return reviews
 
 
+#вывести все обзоры пользователя
 @reviews_router.get("/user/my", response_model=List[schemas.ReviewResponse])
 async def get_my_reviews(
     db: AsyncSession = Depends(get_db),
@@ -88,7 +113,7 @@ async def get_my_reviews(
     return reviews
 
 
-
+#вывести один обзор
 @reviews_router.get("/{review_id}", response_model=schemas.ReviewResponse)
 async def get_review(
     review_id: int,
@@ -111,7 +136,7 @@ async def get_review(
     return review
 
 
-
+#изменить обзор
 @reviews_router.patch("/{review_id}", response_model=schemas.ReviewResponse)
 async def update_review(
     review_id: int,
@@ -153,7 +178,7 @@ async def update_review(
 
     return review
 
-
+#удалить обзор
 @reviews_router.delete("/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_review(
     review_id: int,
@@ -175,3 +200,4 @@ async def delete_review(
     await db.commit()
 
     return None
+

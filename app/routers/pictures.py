@@ -10,7 +10,7 @@ from app.pyd import schemas
 import os
 
 pictures_router = APIRouter(prefix="/pictures", tags=["Pictures"])
-
+# загрузить фото
 @pictures_router.post("/upload", response_model=schemas.PictureResponse, status_code=status.HTTP_201_CREATED)
 async def upload_photo(
     location_id: int,
@@ -58,7 +58,7 @@ async def upload_photo(
     await db.refresh(new_picture)
 
     return new_picture
-
+# удалить фото
 @pictures_router.delete("/{picture_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_picture(
     picture_id: int,
