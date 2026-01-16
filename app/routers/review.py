@@ -22,7 +22,7 @@ async def create_review(
     if not location:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Location with id {review_data.location_id} not found"
+            detail=f"Локация {review_data.location_id} не найдена"
         )
     stmt = (
         select(Review)
@@ -128,7 +128,7 @@ async def get_review(
     review = result.scalar_one_or_none()
 
     if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
+        raise HTTPException(status_code=404, detail="Обзор не найден")
 
     if review.location_links:
         review.location_id = review.location_links[0].locations_id
@@ -154,14 +154,14 @@ async def update_review(
     review = result.scalar_one_or_none()
 
     if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
+        raise HTTPException(status_code=404, detail="Обзор не найден")
 
 
     is_admin = current_user.role_id == 1
     is_author = review.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="Недостаточно прав администратора")
 
 
     update_data = review_update.model_dump(exclude_unset=True)
@@ -188,13 +188,13 @@ async def delete_review(
     review = await db.get(Review, review_id)
 
     if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
+        raise HTTPException(status_code=404, detail="Обзор не найден")
 
     is_admin = current_user.role_id == 1
     is_author = review.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
 
     await db.delete(review)
     await db.commit()

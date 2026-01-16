@@ -15,14 +15,14 @@ from app import config
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
-
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    password_bytes = password.encode("utf-8")[:72]  # ← теперь строго по байтам
+    password_bytes = password.encode("utf-8")[:72] 
     password = password_bytes.decode("utf-8", errors="ignore")
     return pwd_context.hash(password)
 
@@ -66,14 +66,14 @@ async def get_current_user(
 async def authenticate_user(
     username: str, password: str, db: AsyncSession
 ) -> Optional[m.User]:
-    # ИСПРАВЛЕНО: используем правильное имя поля Username
+
     stmt = select(m.User).where(
         or_(m.User.email == username, m.User.Username == username)
     )
     result = await db.execute(stmt)
     user = result.scalars().first()
 
-    # ИСПРАВЛЕНО: проверяем хэшированный пароль
+
     if not user or not verify_password(password, user.password):
         return None
     return user
@@ -89,10 +89,17 @@ async def get_current_admin(current_user: User = Depends(get_current_user)) -> U
     
     return current_user
 
-async def get_current_user_or_none(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
+async def get_current_user_or_none(
+    token: Optional[str] = Depends(oauth2_scheme_optional), 
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    
+    if not token:
+        return None
+    
     try:
 
-        return await get_current_user(token=await oauth2_scheme(request), db=db)
+        return await get_current_user(token=token, db=db)
     except Exception:
 
         return None

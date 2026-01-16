@@ -25,7 +25,7 @@ async def upload_photo(
 
     location = await db.get(LocationSeat, location_id)
     if not location:
-        raise HTTPException(status_code=404, detail="Location not found")
+        raise HTTPException(status_code=404, detail="Такой локации не существует")
 
 
     file_extension = file.filename.split(".")[-1]
@@ -40,7 +40,7 @@ async def upload_photo(
         with open(destination_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not save file: {e}")
+        raise HTTPException(status_code=500, detail=f"Не удалось сохранить файл: {e}")
     finally:
         file.file.close()
 
@@ -70,14 +70,14 @@ async def delete_picture(
 
     pic = await db.get(Picture, picture_id)
     if not pic:
-        raise HTTPException(status_code=404, detail="Picture not found")
+        raise HTTPException(status_code=404, detail="Изображение не найдено")
 
 
     is_admin = getattr(current_user, 'role_id', None) == 1
     is_uploader = pic.user_id == current_user.id
 
     if not (is_uploader or is_admin):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
 
 
     try:
@@ -86,7 +86,7 @@ async def delete_picture(
         if os.path.exists(file_path):
             os.remove(file_path)
     except Exception as e:
-        print(f"Error deleting file: {e}") 
+        print(f"Не удалось удалить файл: {e}") 
 
 
     await db.delete(pic)
@@ -101,7 +101,7 @@ async def get_location_pictures(
 ):
     loc = await db.get(LocationSeat, location_id)
     if not loc:
-        raise HTTPException(status_code=404, detail="Location not found")
+        raise HTTPException(status_code=404, detail="Такой локации не существует")
 
     stmt = select(Picture).where(Picture.location_id == location_id)
     result = await db.execute(stmt)

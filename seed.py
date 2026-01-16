@@ -20,9 +20,6 @@ STATUSES_DATA = [
 SEAT_TYPE_NAMES = [
     "Лавочка",
     "Беседка",
-    "Качели",
-    "Шезлонг",
-    "Навес"
 ]
 
 MATERIALS_DATA = [

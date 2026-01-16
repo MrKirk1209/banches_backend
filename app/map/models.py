@@ -14,6 +14,8 @@ class Role(Base):
     users: Mapped[list["User"]] = relationship(
         "User", back_populates="role", cascade="all, delete"
     )   
+    def __str__(self):
+        return self.role_name
 class User(Base):
     __tablename__ = 'Users'
     
@@ -40,7 +42,8 @@ class User(Base):
         back_populates="users",
         foreign_keys=[role_id]  
     )
-
+    def __str__(self):
+        return self.Username
 
 class TypeOfSeat(Base):
     __tablename__ = 'Type_of_seats'
@@ -53,7 +56,8 @@ class TypeOfSeat(Base):
         foreign_keys='LocationSeat.type'
     )
 
-
+    def __str__(self):
+        return self.name
 class Status(Base):
     __tablename__ = 'Statuses'
     
@@ -65,7 +69,8 @@ class Status(Base):
         foreign_keys='LocationSeat.status'
     )
 
-
+    def __str__(self):
+        return self.name
 class LocationSeat(Base):
     __tablename__ = 'Location_seats'
     
@@ -113,6 +118,8 @@ class LocationSeat(Base):
         cascade="all, delete-orphan"
     )
 
+    def __str__(self):
+        return self.name
 class Picture(Base):
     __tablename__ = 'Pictures' # Лучше назвать во множественном числе
     
@@ -148,7 +155,8 @@ class Pollution(Base):
         foreign_keys='Review.pollution_id'
     )
 
-
+    def __str__(self):
+        return self.name
 class Condition(Base):
     __tablename__ = 'Conditions'
     
@@ -160,7 +168,8 @@ class Condition(Base):
         foreign_keys='Review.condition_id'
     )
 
-
+    def __str__(self):
+        return self.name
 class Material(Base):
     __tablename__ = 'Materials'
     
@@ -172,7 +181,8 @@ class Material(Base):
         foreign_keys='Review.material_id'
     )
 
-
+    def __str__(self):
+        return self.name
 class Review(Base):
     __tablename__ = 'Reviews'
     
@@ -217,6 +227,8 @@ class Review(Base):
         cascade="all, delete-orphan"
     )
 
+    def __str__(self):
+        return f"Отзыв {self.id} (Оценка: {self.rate})"
 
 class LocationSeatOfReview(Base):
     __tablename__ = 'Location_seats_of_Reviews'

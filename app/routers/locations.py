@@ -78,7 +78,6 @@ async def create_location(
 # получить все локации
 @locations_router.get("/", response_model=List[LocationSeatResponse])
 async def get_locations(
-
     min_lat: Optional[Decimal] = None,
     max_lat: Optional[Decimal] = None,
     min_lon: Optional[Decimal] = None,
@@ -86,35 +85,37 @@ async def get_locations(
 
     type_id: Optional[int] = None,
     status_id: Optional[int] = None, 
-    current_user: Optional[User] = Depends(get_current_user_or_none) ,
+    
+
+    current_user: Optional[User] = Depends(get_current_user_or_none),
     db: AsyncSession = Depends(get_db)
 ):
-    # 1. Базовый запрос с подгрузкой связей
+    
     query = select(LocationSeat).options(
         selectinload(LocationSeat.reviews),
         selectinload(LocationSeat.pictures)
     )
 
-    # 2. ЛОГИКА ВИДИМОСТИ (Самое важное)
-    
-    # Проверяем, админ ли это
+
     is_admin = False
-    if current_user and getattr(current_user, 'role_id', None) == 1: # Предполагаем role_id=1 это Админ
-        is_admin = True
+    if current_user:
+
+        if current_user.role_id == 1:
+            is_admin = True
     
     if is_admin:
-        
-        if status_id:
-            query = query.where(LocationSeat.status == status_id)
-            
+   
+        pass 
     else:
 
         query = query.join(Status, LocationSeat.status == Status.id)
-        query = query.where(Status.name == "Активно")
+        query = query.where(Status.name.in_(["Активно", "На ремонте"]))
 
 
+    if status_id:
+        query = query.where(LocationSeat.status == status_id)
 
-    # 3. Гео-фильтры (остаются как были)
+    # 5. Гео-фильтры
     if min_lat and max_lat and min_lon and max_lon:
         query = query.where(
             LocationSeat.cord_x >= min_lat,
@@ -122,6 +123,7 @@ async def get_locations(
             LocationSeat.cord_y >= min_lon,
             LocationSeat.cord_y <= max_lon
         )
+
 
     if type_id:
         query = query.where(LocationSeat.type == type_id)
@@ -142,13 +144,13 @@ async def delete_location(
     location = result.scalar_one_or_none()
 
     if not location:
-        raise HTTPException(status_code=404, detail="Location not found")
+        raise HTTPException(status_code=404, detail="Такой локации не существует")
 
     is_admin = current_user.role_id == 1 
     is_author = location.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="You do not have permission to delete this location")
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
 
 
     await db.delete(location)
@@ -176,22 +178,49 @@ async def get_my_locations(
 @locations_router.get("/{location_id}", response_model=LocationSeatResponse)
 async def get_location_detail(
     location_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+
+    current_user: Optional[User] = Depends(get_current_user_or_none)
 ):
 
     stmt = (
         select(LocationSeat)
         .options(
             selectinload(LocationSeat.reviews),
-            selectinload(LocationSeat.pictures)
+            selectinload(LocationSeat.pictures),
+            selectinload(LocationSeat.status_ref) 
         )
         .where(LocationSeat.id == location_id)
     )
     result = await db.execute(stmt)
     location = result.scalar_one_or_none()
 
+
     if not location:
-        raise HTTPException(status_code=404, detail="Location not found")
+        raise HTTPException(status_code=404, detail="Такой локации не существует")
+
+    
+
+    public_statuses = ["Активно", "На ремонте"]
+
+    is_admin = False
+    is_author = False
+    
+    if current_user:
+        if current_user.role_id == 1:
+            is_admin = True
+        if location.author_id == current_user.id:
+            is_author = True
+            
+
+    current_status_name = location.status_ref.name if location.status_ref else ""
+
+
+    if current_status_name not in public_statuses:
+
+        if not is_admin and not is_author:
+
+            raise HTTPException(status_code=404, detail="Такой локации не существует")
     
     return location
 # обновить локацию
@@ -216,14 +245,14 @@ async def update_location(
     location = result.scalar_one_or_none()
 
     if not location:
-        raise HTTPException(status_code=404, detail="Location not found")
+        raise HTTPException(status_code=404, detail="Такой локации не существует")
 
 
     is_admin = getattr(current_user, 'role_id', None) == 1
     is_author = location.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
 
 
     update_data = location_update.model_dump(exclude_unset=True)

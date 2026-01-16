@@ -46,7 +46,7 @@ async def create_user_by_admin(
     stmt = select(User).where(User.email == user_data.email)
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
     new_user = User(
         Username=user_data.Username,
@@ -67,7 +67,7 @@ async def delete_user(
 ):
     user = await db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     await db.delete(user)
     await db.commit()
@@ -82,11 +82,11 @@ async def change_user_role(
 ):
     user = await db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
     
     role = await db.get(Role, role_id)
     if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
+        raise HTTPException(status_code=404, detail="Роль не найдена")
 
     user.role_id = role_id
     await db.commit()
