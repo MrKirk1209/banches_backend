@@ -81,22 +81,18 @@ async def authenticate_user(
 
 async def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     
-    if current_user.role.role_name.lower() not in ["admin"]:
+    if current_user.role_id != 1:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="У вас нет прав"
+            detail="У вас нет прав администратора"
         )
     
     return current_user
 
 async def get_current_user_or_none(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
-    """
-    Пытается получить пользователя из токена.
-    Если токена нет или он невалиден — не выдает ошибку, а возвращает None.
-    """
     try:
-        # Пытаемся использовать стандартную логику получения юзера
+
         return await get_current_user(token=await oauth2_scheme(request), db=db)
     except Exception:
-        # Если токена нет или ошибка — возвращаем None
+
         return None

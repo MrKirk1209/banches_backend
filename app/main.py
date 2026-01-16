@@ -9,7 +9,8 @@ from app.routers import (
     locations_router,
     reviews_router,
     dict_router,
-    pictures_router
+    pictures_router,
+    users_router
 )
 app = FastAPI()
 
@@ -30,4 +31,4 @@ app.include_router(locations_router,)
 app.include_router(reviews_router,)
 app.include_router(dict_router,)
 app.include_router(pictures_router,)
-
+app.include_router(users_router,)

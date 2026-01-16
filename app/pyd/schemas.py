@@ -75,28 +75,27 @@ class PollutionCreate(PollutionBase):
 class PollutionResponse(PollutionBase):
     id: int
 
-# --- CONDITIONS ---
 class ConditionCreate(ConditionBase):
     pass
 
 class ConditionResponse(ConditionBase):
     id: int
 
-# --- MATERIALS ---
+
 class MaterialCreate(MaterialBase):
     pass
 
 class MaterialResponse(MaterialBase):
     id: int
 
-# --- TYPES ---
+
 class TypeOfSeatCreate(TypeOfSeatBase):
     pass
 
 class TypeOfSeatResponse(TypeOfSeatBase):
     id: int
 
-# --- STATUSES ---
+
 class StatusCreate(StatusBase):
     pass
 
@@ -118,6 +117,12 @@ class LocationSeatResponse(LocationSeatBase):
             Decimal: str  
         }
     )
+class UserResponse(UserBase):
+
+    id: int
+    role_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class ReviewUpdate(BaseModel):
 
@@ -151,3 +156,4 @@ class LocationSeatUpdate(BaseModel):
         return v
 
     model_config = ConfigDict(from_attributes=True)
+

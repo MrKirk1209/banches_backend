@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.map.models import LocationSeat, Picture, User
 from app.security import get_current_user
+from typing import List
+from sqlalchemy import select
 from app.pyd import schemas
 import os
 
@@ -91,3 +93,16 @@ async def delete_picture(
     await db.commit()
     
     return None
+
+@pictures_router.get("/location/{location_id}", response_model=List[schemas.PictureResponse])
+async def get_location_pictures(
+    location_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    loc = await db.get(LocationSeat, location_id)
+    if not loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    stmt = select(Picture).where(Picture.location_id == location_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
