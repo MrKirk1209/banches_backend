@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
-
+from fastapi import Request
 from app.map.models import User
 from typing import Annotated, Optional
 from app.database import get_db
@@ -88,3 +88,15 @@ async def get_current_admin(current_user: User = Depends(get_current_user)) -> U
         )
     
     return current_user
+
+async def get_current_user_or_none(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
+    """
+    Пытается получить пользователя из токена.
+    Если токена нет или он невалиден — не выдает ошибку, а возвращает None.
+    """
+    try:
+        # Пытаемся использовать стандартную логику получения юзера
+        return await get_current_user(token=await oauth2_scheme(request), db=db)
+    except Exception:
+        # Если токена нет или ошибка — возвращаем None
+        return None

@@ -10,6 +10,10 @@ from app.pyd.base_models import LocationSeatBase
 from app.security import get_current_user
 from app.map.models import User,LocationSeat,Review,LocationSeatOfReview
 from sqlalchemy.orm import selectinload
+from app.map.models import Status
+from app.security import get_current_user_or_none
+
+
 locations_router = APIRouter(prefix="/locations", tags=["Locations"])
 # cоздать локацию
 @locations_router.post("/", response_model=LocationSeatResponse, status_code=status.HTTP_201_CREATED)
@@ -81,15 +85,36 @@ async def get_locations(
     max_lon: Optional[Decimal] = None,
 
     type_id: Optional[int] = None,
-    status_id: Optional[int] = None,
+    status_id: Optional[int] = None, 
+    current_user: Optional[User] = Depends(get_current_user_or_none) ,
     db: AsyncSession = Depends(get_db)
 ):
+    # 1. Базовый запрос с подгрузкой связей
     query = select(LocationSeat).options(
         selectinload(LocationSeat.reviews),
         selectinload(LocationSeat.pictures)
     )
 
+    # 2. ЛОГИКА ВИДИМОСТИ (Самое важное)
+    
+    # Проверяем, админ ли это
+    is_admin = False
+    if current_user and getattr(current_user, 'role_id', None) == 1: # Предполагаем role_id=1 это Админ
+        is_admin = True
+    
+    if is_admin:
+        
+        if status_id:
+            query = query.where(LocationSeat.status == status_id)
+            
+    else:
 
+        query = query.join(Status, LocationSeat.status == Status.id)
+        query = query.where(Status.name == "Активно")
+
+
+
+    # 3. Гео-фильтры (остаются как были)
     if min_lat and max_lat and min_lon and max_lon:
         query = query.where(
             LocationSeat.cord_x >= min_lat,
@@ -98,15 +123,11 @@ async def get_locations(
             LocationSeat.cord_y <= max_lon
         )
 
-
     if type_id:
         query = query.where(LocationSeat.type == type_id)
-    if status_id:
-        query = query.where(LocationSeat.status == status_id)
 
     result = await db.execute(query)
     return result.scalars().all()
-
 
 # удалить локацию
 @locations_router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -151,13 +172,13 @@ async def get_my_locations(
     )
     result = await db.execute(stmt)
     return result.scalars().all()
-
+#Получить полную информацию о локации
 @locations_router.get("/{location_id}", response_model=LocationSeatResponse)
 async def get_location_detail(
     location_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """Получить полную информацию о локации по ID (с отзывами и фото)"""
+
     stmt = (
         select(LocationSeat)
         .options(
