@@ -34,7 +34,7 @@ async def login(
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"id": str(user.id), "username": user.Username}, 
+        data={"sub": str(user.id), "username": user.Username}, 
         expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
@@ -83,7 +83,7 @@ async def register(
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"id": str(new_user.id), "username": new_user.Username}, 
+        data={"sub": str(new_user.id), "username": new_user.Username}, 
         expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
