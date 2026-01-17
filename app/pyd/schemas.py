@@ -1,6 +1,6 @@
 from datetime import datetime
 from .base_models import *
-from typing import List, Optional
+from typing import List, Optional,Any
 from pydantic import BaseModel, Field, model_validator,computed_field
 from .base_models import UserBase,LocationSeatBase
 
@@ -68,13 +68,28 @@ class ReviewResponse(ReviewBase):
     id: int
     author_id: int      
     created_at: datetime
+    
+    # 1. Объявляем скрытые поля, чтобы Pydantic вытащил их из БД
     author: Optional[UserBase] = Field(None, exclude=True)
+    location_links: List[Any] = Field([], exclude=True) # <-- ВАЖНО! Нужно объявить это поле
 
+    # 2. Добавляем декоратор
+    @computed_field
+    def location_name(self) -> str:
+        # Теперь self.location_links доступен
+        if self.location_links and len(self.location_links) > 0:
+            link = self.location_links[0]
+            # Проверяем, загружена ли локация внутри связи
+            if hasattr(link, 'location') and link.location:
+                return link.location.name
+        return "Локация удалена"
+    
+    # То же самое для имени автора
     @computed_field
     def author_username(self) -> str:
         if self.author:
-            return self.author.Username  
-        return "Удаленный пользователь"
+            return self.author.Username
+        return "Неизвестный"
 
     model_config = ConfigDict(from_attributes=True)
 

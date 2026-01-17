@@ -100,7 +100,9 @@ async def get_my_reviews(
 ):
     stmt = (
         select(Review)
-        .options(selectinload(Review.location_links))
+        .options(
+            selectinload(Review.location_links).selectinload(LocationSeatOfReview.location)
+        )
         .where(Review.author_id == current_user.id)
     )
     result = await db.execute(stmt)
