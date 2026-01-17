@@ -4,6 +4,11 @@ from typing import Union
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
+
+from starlette.middleware.sessions import SessionMiddleware
+from app.admin_auth import authentication_backend # <--- Импортируем нашу логику
+from app.config import settings
+
 from sqladmin import Admin, ModelView
 
 from app.map.models import (
@@ -33,7 +38,7 @@ app.add_middleware(
 os.makedirs("uploads", exist_ok=True)
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
-
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY) 
 app.include_router(auth_router,)
 
 app.include_router(locations_router,)
@@ -42,7 +47,11 @@ app.include_router(dict_router,)
 app.include_router(pictures_router,)
 app.include_router(users_router,)
 
-admin = Admin(app, engine)
+admin = Admin(
+    app, 
+    engine, 
+    authentication_backend=authentication_backend 
+)
 
 class UserAdmin(ModelView, model=User):
     name = "Пользователь"
