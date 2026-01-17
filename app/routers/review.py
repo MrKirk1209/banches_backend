@@ -10,6 +10,7 @@ from app.security import get_current_user
 from app.map.models import User, Review, LocationSeat, LocationSeatOfReview
 from app.pyd import schemas
 
+
 reviews_router = APIRouter(prefix="/reviews", tags=["Reviews"])
 # cоздать обзор
 @reviews_router.post("/", response_model=schemas.ReviewResponse, status_code=status.HTTP_201_CREATED)
@@ -18,28 +19,15 @@ async def create_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+
     location = await db.get(LocationSeat, review_data.location_id)
     if not location:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Локация {review_data.location_id} не найдена"
+            detail=f"Location with id {review_data.location_id} not found"
         )
-    stmt = (
-        select(Review)
-        .join(LocationSeatOfReview, Review.id == LocationSeatOfReview.reviews_id)
-        .where(
-            Review.author_id == current_user.id,
-            LocationSeatOfReview.locations_id == location.id
-        )
-    )
-    result = await db.execute(stmt)
-    existing_review = result.scalar_one_or_none()
 
-    if existing_review:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Обзор уже существует, просим изменить его"
-        )
+
     new_review = Review(
         rate=review_data.rate,
         pollution_id=review_data.pollution_id,
@@ -53,6 +41,7 @@ async def create_review(
     db.add(new_review)
     await db.flush() 
 
+
     new_link = LocationSeatOfReview(
         locations_id=location.id,
         reviews_id=new_review.id
@@ -60,13 +49,29 @@ async def create_review(
     db.add(new_link)
      
     await db.commit()
-    await db.refresh(new_review)
+    
 
-    new_review.location_id = location.id
-    return new_review
+    stmt = (
+        select(Review)
+        .options(
+
+            selectinload(Review.author),
+
+            selectinload(Review.location_links).selectinload(LocationSeatOfReview.location)
+        )
+        .where(Review.id == new_review.id)
+    )
+    
+    result = await db.execute(stmt)
+    full_review = result.scalar_one()
+
+
+    full_review.location_id = location.id
+    
+    return full_review
 
 #вывести все обзоры по локации с пагинацией
-@reviews_router.get("/{location_id}", response_model=List[schemas.ReviewResponse])
+@reviews_router.get("/location/{location_id}", response_model=List[schemas.ReviewResponse])
 async def get_location_reviews(
     location_id: int,
     limit: int = 10, 
@@ -75,8 +80,12 @@ async def get_location_reviews(
 ):
     stmt = (
         select(Review)
-        .options(selectinload(Review.location_links),
-            selectinload(Review.author))
+        .options(
+            # Загружаем автора (для author_username)
+            selectinload(Review.author),
+            # Загружаем связь -> локацию (для location_name)
+            selectinload(Review.location_links).selectinload(LocationSeatOfReview.location)
+        )
         .join(LocationSeatOfReview, Review.id == LocationSeatOfReview.reviews_id)
         .where(LocationSeatOfReview.locations_id == location_id)
         .order_by(Review.created_at.desc())
@@ -86,6 +95,7 @@ async def get_location_reviews(
     result = await db.execute(stmt)
     reviews = result.scalars().all()
     
+    # Проставляем ID локации вручную (так как его нет в таблице Reviews)
     for r in reviews:
         r.location_id = location_id
         
@@ -101,13 +111,14 @@ async def get_my_reviews(
     stmt = (
         select(Review)
         .options(
+            selectinload(Review.author),
             selectinload(Review.location_links).selectinload(LocationSeatOfReview.location)
         )
         .where(Review.author_id == current_user.id)
+        .order_by(Review.created_at.desc())
     )
     result = await db.execute(stmt)
     reviews = result.scalars().all()
-
 
     for r in reviews:
         if r.location_links:
@@ -124,14 +135,17 @@ async def get_review(
 ):
     stmt = (
         select(Review)
-        .options(selectinload(Review.location_links))
+        .options(
+            selectinload(Review.author),
+            selectinload(Review.location_links).selectinload(LocationSeatOfReview.location)
+        )
         .where(Review.id == review_id)
     )
     result = await db.execute(stmt)
     review = result.scalar_one_or_none()
 
     if not review:
-        raise HTTPException(status_code=404, detail="Обзор не найден")
+        raise HTTPException(status_code=404, detail="Обзор не найден")
 
     if review.location_links:
         review.location_id = review.location_links[0].locations_id
@@ -147,34 +161,37 @@ async def update_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
+    # Загружаем со всеми связями сразу
     stmt = (
         select(Review)
-        .options(selectinload(Review.location_links))
+        .options(
+            selectinload(Review.author),
+            selectinload(Review.location_links).selectinload(LocationSeatOfReview.location)
+        )
         .where(Review.id == review_id)
     )
     result = await db.execute(stmt)
     review = result.scalar_one_or_none()
 
     if not review:
-        raise HTTPException(status_code=404, detail="Обзор не найден")
+        raise HTTPException(status_code=404, detail="Обзор не найден")
 
-
-    is_admin = current_user.role_id == 1
+    # Проверка прав
+    is_admin = getattr(current_user, 'role_id', None) == 1
     is_author = review.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="Недостаточно прав администратора")
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
 
-
+    # Обновление полей
     update_data = review_update.model_dump(exclude_unset=True)
     
     for key, value in update_data.items():
         setattr(review, key, value)
 
     await db.commit()
-    await db.refresh(review)
-
+    # refresh тут не нужен, так как объект в памяти уже обновлен, 
+    # а refresh может сбросить подгруженные связи (author/location)
 
     if review.location_links:
         review.location_id = review.location_links[0].locations_id
@@ -188,16 +205,17 @@ async def delete_review(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Тут можно использовать get, так как для удаления нам не нужны подгруженные связи
     review = await db.get(Review, review_id)
 
     if not review:
-        raise HTTPException(status_code=404, detail="Обзор не найден")
+        raise HTTPException(status_code=404, detail="Обзор не найден")
 
-    is_admin = current_user.role_id == 1
+    is_admin = getattr(current_user, 'role_id', None) == 1
     is_author = review.author_id == current_user.id
 
     if not (is_author or is_admin):
-        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
+        raise HTTPException(status_code=403, detail="У вас нет прав для удаления этого обзора")
 
     await db.delete(review)
     await db.commit()
