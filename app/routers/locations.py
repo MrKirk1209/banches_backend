@@ -22,7 +22,7 @@ async def create_location(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    
+    # --- 1. ПРОВЕРКА НА ДУБЛИКАТЫ (В самом начале) ---
     stmt = select(LocationSeat).where(
         LocationSeat.cord_x == location_data.cord_x,
         LocationSeat.cord_y == location_data.cord_y
@@ -35,6 +35,8 @@ async def create_location(
             status_code=status.HTTP_409_CONFLICT, 
             detail="Локация с такими координатами уже существует"
         )
+
+    # --- 2. СОЗДАНИЕ ЛОКАЦИИ (Переменная new_location появляется здесь) ---
     new_location = LocationSeat(
         name=location_data.name,
         description=location_data.description,
@@ -44,17 +46,16 @@ async def create_location(
         cord_y=location_data.cord_y,
         status=location_data.status,
         author_id=current_user.id
-
     )
     db.add(new_location)
-    await db.flush()
-
-
     
+    # Важно: flush присваивает ID новой локации
+    await db.flush() 
+
+    # --- 3. ОБРАБОТКА ОТЗЫВА (Если есть) ---
     if location_data.first_review:
         review_in = location_data.first_review
         
-
         new_review = Review(
             rate=review_in.rate,
             pollution_id=review_in.pollution_id,
@@ -73,14 +74,21 @@ async def create_location(
         )
         db.add(link)
 
+    # Сохраняем всё в базу
     await db.commit()
     
-
+    # --- 4. ПОДГОТОВКА ОТВЕТА (Строго В КОНЦЕ) ---
+    # Мы используем new_location.id только тут, когда он уже точно существует
     stmt = (
         select(LocationSeat)
         .options(
-            selectinload(LocationSeat.reviews),   
-            selectinload(LocationSeat.pictures)   
+            # Подгружаем цепочку: Отзывы -> Авторы отзывов -> Локация отзыва
+            selectinload(LocationSeat.reviews).options(
+                selectinload(Review.author),
+                selectinload(Review.location_links)
+            ),
+            selectinload(LocationSeat.pictures),
+            selectinload(LocationSeat.status_ref)   
         )
         .where(LocationSeat.id == new_location.id)
     )
@@ -88,6 +96,8 @@ async def create_location(
     full_location = result.scalar_one()
     
     return full_location
+    
+
 # получить все локации
 @locations_router.get("/", response_model=List[LocationSeatResponse])
 async def get_locations(
@@ -105,9 +115,14 @@ async def get_locations(
 ):
     
     query = select(LocationSeat).options(
-            
-        selectinload(LocationSeat.reviews).selectinload(Review.author),
-        selectinload(LocationSeat.pictures)
+
+        selectinload(LocationSeat.reviews).options(
+            selectinload(Review.author),
+            selectinload(Review.location_links).selectinload(LocationSeatOfReview.location) 
+        ),
+        
+        selectinload(LocationSeat.pictures),
+        selectinload(LocationSeat.status_ref)
     )
 
 
@@ -181,8 +196,17 @@ async def get_my_locations(
     stmt = (
         select(LocationSeat)
         .options(
-            selectinload(LocationSeat.reviews),
-            selectinload(LocationSeat.pictures)
+
+            selectinload(LocationSeat.reviews).options(
+                selectinload(Review.location_links), 
+                selectinload(Review.author)          
+            ),
+            
+   
+            selectinload(LocationSeat.pictures),
+            
+
+            selectinload(LocationSeat.status_ref)
         )
         .where(LocationSeat.author_id == current_user.id)
     )
@@ -193,49 +217,41 @@ async def get_my_locations(
 async def get_location_detail(
     location_id: int,
     db: AsyncSession = Depends(get_db),
-
     current_user: Optional[User] = Depends(get_current_user_or_none)
 ):
-
     stmt = (
         select(LocationSeat)
         .options(
-            selectinload(LocationSeat.reviews).selectinload(Review.author),
+            # Подгружаем всё необходимое для LocationSeatResponse + ReviewResponse
+            selectinload(LocationSeat.reviews).options(
+                selectinload(Review.location_links), # Для имени локации в отзыве (если надо)
+                selectinload(Review.author)          # Для имени автора отзыва
+            ),
             selectinload(LocationSeat.pictures),
             selectinload(LocationSeat.status_ref)
         )
+        # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+        # Ищем конкретную локацию по её ID, а не все локации автора
         .where(LocationSeat.id == location_id)
     )
     result = await db.execute(stmt)
     location = result.scalar_one_or_none()
 
-
     if not location:
         raise HTTPException(status_code=404, detail="Такой локации не существует")
-
     
-
+    # ... (дальше твоя логика проверки статусов, public_statuses и т.д.) ...
+    
+    # ПОВТОРЮ ЛОГИКУ ПРОВЕРКИ (на всякий случай):
     public_statuses = ["Активно", "На ремонте"]
+    is_admin = current_user and getattr(current_user, 'role_id', None) == 1
+    is_author = current_user and location.author_id == current_user.id
+    status_name = location.status_ref.name if location.status_ref else ""
 
-    is_admin = False
-    is_author = False
-    
-    if current_user:
-        if current_user.role_id == 1:
-            is_admin = True
-        if location.author_id == current_user.id:
-            is_author = True
-            
-
-    current_status_name = location.status_ref.name if location.status_ref else ""
-
-
-    if current_status_name not in public_statuses:
-
-        if not is_admin and not is_author:
-
+    if status_name not in public_statuses:
+        if not (is_admin or is_author):
             raise HTTPException(status_code=404, detail="Такой локации не существует")
-    
+            
     return location
 # обновить локацию
 @locations_router.patch("/{location_id}", response_model=LocationSeatResponse)
@@ -250,10 +266,14 @@ async def update_location(
     stmt = (
         select(LocationSeat)
         .options(
-            selectinload(LocationSeat.reviews),
-            selectinload(LocationSeat.pictures)
+            selectinload(LocationSeat.reviews).options(
+                selectinload(Review.location_links),
+                selectinload(Review.author)
+            ),
+            selectinload(LocationSeat.pictures),
+            selectinload(LocationSeat.status_ref)
         )
-        .where(LocationSeat.id == location_id)
+        .where(LocationSeat.id == location_id) # Ищем просто по ID!
     )
     result = await db.execute(stmt)
     location = result.scalar_one_or_none()
