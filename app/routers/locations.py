@@ -22,6 +22,19 @@ async def create_location(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    
+    stmt = select(LocationSeat).where(
+        LocationSeat.cord_x == location_data.cord_x,
+        LocationSeat.cord_y == location_data.cord_y
+    )
+    result = await db.execute(stmt)
+    existing_location = result.scalars().first()
+
+    if existing_location:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, 
+            detail="Локация с такими координатами уже существует"
+        )
     new_location = LocationSeat(
         name=location_data.name,
         description=location_data.description,
@@ -186,9 +199,9 @@ async def get_location_detail(
     stmt = (
         select(LocationSeat)
         .options(
-            selectinload(LocationSeat.reviews),
+            selectinload(LocationSeat.reviews).selectinload(Review.author),
             selectinload(LocationSeat.pictures),
-            selectinload(LocationSeat.status_ref) 
+            selectinload(LocationSeat.status_ref)
         )
         .where(LocationSeat.id == location_id)
     )

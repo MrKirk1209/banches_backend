@@ -66,7 +66,7 @@ async def create_review(
     return new_review
 
 #вывести все обзоры по локации с пагинацией
-@reviews_router.get("/location/{location_id}", response_model=List[schemas.ReviewResponse])
+@reviews_router.get("/{location_id}", response_model=List[schemas.ReviewResponse])
 async def get_location_reviews(
     location_id: int,
     limit: int = 10, 
@@ -75,7 +75,8 @@ async def get_location_reviews(
 ):
     stmt = (
         select(Review)
-        .options(selectinload(Review.location_links))
+        .options(selectinload(Review.location_links),
+            selectinload(Review.author))
         .join(LocationSeatOfReview, Review.id == LocationSeatOfReview.reviews_id)
         .where(LocationSeatOfReview.locations_id == location_id)
         .order_by(Review.created_at.desc())

@@ -1,7 +1,7 @@
 from datetime import datetime
 from .base_models import *
 from typing import List, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator,computed_field
 from .base_models import UserBase,LocationSeatBase
 
 class RoleSchema(RoleBase):
@@ -68,6 +68,16 @@ class ReviewResponse(ReviewBase):
     id: int
     author_id: int      
     created_at: datetime
+    author: Optional[UserBase] = Field(None, exclude=True)
+
+    @computed_field
+    def author_username(self) -> str:
+        if self.author:
+            return self.author.Username  
+        return "Удаленный пользователь"
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PollutionCreate(PollutionBase):
     pass

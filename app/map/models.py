@@ -84,7 +84,6 @@ class LocationSeat(Base):
     author_id: Mapped[int] = mapped_column(ForeignKey('Users.id'))
     status: Mapped[int] = mapped_column(ForeignKey('Statuses.id'))
     
-    # ❌ review_id УДАЛЕН (он здесь не нужен при связи Many-to-Many)
     
     # --- Отношения ---
     author: Mapped['User'] = relationship(
