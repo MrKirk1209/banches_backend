@@ -136,7 +136,16 @@ class LocationSeatResponse(LocationSeatBase):
     reviews: List["ReviewResponse"] = [] 
     
     pictures: List[PictureResponse] = [] 
-    
+    @computed_field
+    def author_username(self) -> str:
+        if self.author:
+            return self.author.Username
+        return "Неизвестный"
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: str}
+    )
     model_config = ConfigDict(
         from_attributes=True,
         json_encoders={
