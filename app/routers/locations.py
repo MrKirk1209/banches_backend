@@ -194,7 +194,7 @@ async def get_my_locations(
     stmt = (
         select(LocationSeat)
         .options(
-
+            selectinload(LocationSeat.author),
             selectinload(LocationSeat.reviews).options(
                 selectinload(Review.location_links), 
                 selectinload(Review.author)          
@@ -266,6 +266,7 @@ async def update_location(
     stmt = (
         select(LocationSeat)
         .options(
+            selectinload(LocationSeat.author),
             selectinload(LocationSeat.reviews).options(
                 selectinload(Review.location_links),
                 selectinload(Review.author)
