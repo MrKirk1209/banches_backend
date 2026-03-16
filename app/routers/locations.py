@@ -113,7 +113,7 @@ async def get_locations(
 ):
     
     query = select(LocationSeat).options(
-
+        selectinload(LocationSeat.author),
         selectinload(LocationSeat.reviews).options(
             selectinload(Review.author),
             selectinload(Review.location_links).selectinload(LocationSeatOfReview.location) 
