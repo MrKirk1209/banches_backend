@@ -6,34 +6,44 @@ async def clean_database():
     print("🧹 Очистка базы данных...")
     
     async with async_session_maker() as session:
-        # Список таблиц, которые нужно очистить.
-        # ВАЖНО: Используй точные названия таблиц из БД (обычно они совпадают с __tablename__)
-        # CASCADE удалит зависимые данные (например, удаляя User, удалит и его Review)
+        # ТОЧНЫЕ названия таблиц из твоих моделей (проверь __tablename__):
         tables = [
-            "Location_seats_of_Reviews", # Связи удаляем первыми (или вместе с остальными)
+            # Связи (удаляем первыми)
+            "Location_seats_of_Reviews",
+            
+            # Контент (зависит от пользователей и справочников)
             "Pictures",
             "Reviews",
+            "Complaints",  # ← добавлена сюда
+            
+            # Основные сущности
             "Location_seats",
+            
+            # Пользователи и роли
             "Users",
             "Roles",
-            # Справочники тоже чистим, seed.py их заново создаст
+            
+            # Справочники (seed.py их восстановит)
             "Type_of_seats",
             "Statuses",
             "Materials",
             "Conditions",
-            "Рollutions" # Скопируй название точно как в модели (у тебя там русская Р была?)
+            "Рollutions",  # ← русская Р из твоей модели Pollution
+            
+            # Жалобы (справочники)
+            "Complaint_reasons",     # ← в модели ComplaintReason
+            "Complaint_statuses",    # ← в модели ComplaintStatus
         ]
         
-        # Формируем SQL запрос: TRUNCATE TABLE table1, table2... RESTART IDENTITY CASCADE;
-        # RESTART IDENTITY - сбрасывает ID обратно к 1.
-        # CASCADE - игнорирует ограничения внешних ключей при удалении.
-        tables_sql = ", ".join([f'"{t}"' for t in tables]) # Оборачиваем в кавычки на случай спецсимволов
+        # Оборачиваем в двойные кавычки для PostgreSQL (особенно важно для "Рollutions")
+        tables_sql = ", ".join([f'"{t}"' for t in tables])
         statement = text(f"TRUNCATE TABLE {tables_sql} RESTART IDENTITY CASCADE;")
         
         try:
             await session.execute(statement)
             await session.commit()
             print("✅ База данных полностью очищена.")
+            print(f"   🗂️  Очищено таблиц: {len(tables)}")
         except Exception as e:
             print(f"❌ Ошибка при очистке: {e}")
             await session.rollback()

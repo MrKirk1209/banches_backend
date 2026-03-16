@@ -6,6 +6,7 @@ from fastapi import HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from fastapi import Request
+from sqlalchemy.orm import joinedload
 from app.map.models import User
 from typing import Annotated, Optional
 from app.database import get_db
@@ -44,7 +45,7 @@ async def get_current_user(
 ) -> m.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="НЕ АВТОРИЗОВАН",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -56,12 +57,18 @@ async def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-
-    user = await db.get(m.User, int(user_id))
+    stmt = (
+        select(m.User)
+        .options(joinedload(m.User.role))  # ← подгружаем роль сразу
+        .where(m.User.id == int(user_id))
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+    if user.is_banned:
+        raise HTTPException(status_code=403, detail="Ваш аккаунт заблокирован")
     return user
-
 
 async def authenticate_user(
     username: str, password: str, db: AsyncSession

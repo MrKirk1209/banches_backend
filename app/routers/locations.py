@@ -22,7 +22,7 @@ async def create_location(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # --- 1. ПРОВЕРКА НА ДУБЛИКАТЫ (В самом начале) ---
+
     stmt = select(LocationSeat).where(
         LocationSeat.cord_x == location_data.cord_x,
         LocationSeat.cord_y == location_data.cord_y
@@ -36,7 +36,7 @@ async def create_location(
             detail="Локация с такими координатами уже существует"
         )
 
-    # --- 2. СОЗДАНИЕ ЛОКАЦИИ (Переменная new_location появляется здесь) ---
+
     new_location = LocationSeat(
         name=location_data.name,
         description=location_data.description,
@@ -49,10 +49,10 @@ async def create_location(
     )
     db.add(new_location)
     
-    # Важно: flush присваивает ID новой локации
+
     await db.flush() 
 
-    # --- 3. ОБРАБОТКА ОТЗЫВА (Если есть) ---
+
     if location_data.first_review:
         review_in = location_data.first_review
         
@@ -74,15 +74,13 @@ async def create_location(
         )
         db.add(link)
 
-    # Сохраняем всё в базу
     await db.commit()
     
-    # --- 4. ПОДГОТОВКА ОТВЕТА (Строго В КОНЦЕ) ---
-    # Мы используем new_location.id только тут, когда он уже точно существует
+
     stmt = (
         select(LocationSeat)
         .options(
-            # Подгружаем цепочку: Отзывы -> Авторы отзывов -> Локация отзыва
+
             selectinload(LocationSeat.reviews).options(
                 selectinload(Review.author),
                 selectinload(Review.location_links)

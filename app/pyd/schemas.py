@@ -3,7 +3,8 @@ from .base_models import *
 from typing import List, Optional,Any
 from pydantic import BaseModel, Field, model_validator,computed_field
 from .base_models import UserBase,LocationSeatBase
-
+from pydantic import BaseModel, root_validator
+from typing import Optional
 class RoleSchema(RoleBase):
     id: int = Field(None, gt=0, example=1)
     role_name: str = Field(None, max_length=255)
@@ -182,3 +183,38 @@ class LocationSeatUpdate(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class ComplaintCreate(BaseModel):
+    reason_id: int = Field(gt=0)
+    text: Optional[str] = None
+    location_id: Optional[int] = Field(default=None, gt=0)
+    review_id: Optional[int] = Field(default=None, gt=0)
+    picture_id: Optional[int] = Field(default=None, gt=0)
+    reported_user_id: Optional[int] = Field(default=None, gt=0)
+
+    @root_validator(pre=True)
+    def check_only_one_target(cls, values):
+        targets =[
+            values.get('location_id'), 
+            values.get('review_id'), 
+            values.get('picture_id'), 
+            values.get('reported_user_id')
+        ]
+        # Считаем сколько таргетов передано
+        if sum(1 for t in targets if t is not None) != 1:
+            raise ValueError('Жалоба должна быть привязана ровно к одному объекту (location, review, picture или user)')
+        return values
+class ComplaintResponse(BaseModel):
+    id: int
+    author_id: int
+    reason_id: int
+    status_id: int
+    text: Optional[str]
+    location_id: Optional[int]
+    review_id: Optional[int]
+    picture_id: Optional[int]
+    reported_user_id: Optional[int]
+    resolved_by_id: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

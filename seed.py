@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import async_session_maker
 from app.map.models import (
-    User, Role, Status, TypeOfSeat, Material, 
+    Complaint, ComplaintReason, ComplaintStatus, User, Role, Status, TypeOfSeat, Material, 
     Condition, Pollution, LocationSeat, Review, LocationSeatOfReview
 )
 from app.security import get_password_hash
@@ -24,7 +24,8 @@ SEAT_TYPE_NAMES = ["Лавочка", "Беседка"]
 MATERIALS_DATA = ["Дерево", "Металл", "Бетон", "Пластик", "Комбинированный", "Камень"]
 CONDITIONS_DATA = ["Идеальное", "Хорошее", "Удовлетворительное", "Плохое", "Аварийное"]
 POLLUTIONS_DATA = ["Чисто", "Немного мусора", "Грязно", "Свалка", "Переполнена урна"]
-
+COMPLAINT_STATUSES_DATA = ["На рассмотрении", "Одобрена", "Отклонена"]
+COMPLAINT_REASONS_DATA =["Спам", "Нет лавочки", "Оскорбление", "Порнография"]
 # Координаты Нижнего Тагила (Центр)
 TAGIL_LAT = 57.9194
 TAGIL_LON = 59.9650
@@ -74,7 +75,7 @@ async def seed_default_users(session: AsyncSession):
 
 # --- ГЕНЕРАЦИЯ РАНДОМНОГО КОНТЕНТА (Тагил) ---
 
-async def seed_random_content(session: AsyncSession, users_count=10, locations_count=20, reviews_count=30):
+async def seed_random_content(session: AsyncSession, users_count=10, locations_count=20, reviews_count=30,complaints_count=15):
     print(f"\n🎲 Генерация рандомных данных для Нижнего Тагила...")
     
     # 1. Получаем ID справочников
@@ -85,7 +86,8 @@ async def seed_random_content(session: AsyncSession, users_count=10, locations_c
     materials = (await session.execute(select(Material))).scalars().all()
     conditions = (await session.execute(select(Condition))).scalars().all()
     pollutions = (await session.execute(select(Pollution))).scalars().all()
-
+    complaint_statuses = (await session.execute(select(ComplaintStatus))).scalars().all()
+    complaint_reasons = (await session.execute(select(ComplaintReason))).scalars().all()
     if not all([types, statuses, materials, conditions, pollutions]):
         print("❌ Сначала заполните справочники!")
         return
@@ -140,14 +142,14 @@ async def seed_random_content(session: AsyncSession, users_count=10, locations_c
     await session.commit()
     for l in created_locations: await session.refresh(l)
 
-    # 4. Создаем отзывы
+        # 4. Создаем отзывы
+    created_reviews =[]
     print(f"   ⭐ Создаем {reviews_count} отзывов...")
     
     for _ in range(reviews_count):
         target_location = random.choice(created_locations)
         author = random.choice(created_users)
         
-        # Создаем сам отзыв
         review = Review(
             rate=random.randint(1, 5),
             pollution_id=random.choice(pollutions).id,
@@ -158,9 +160,9 @@ async def seed_random_content(session: AsyncSession, users_count=10, locations_c
             created_at=datetime.utcnow()
         )
         session.add(review)
-        await session.flush() # Получаем ID отзыва
+        await session.flush() 
+        created_reviews.append(review)
 
-        # Связываем отзыв и локацию (Many-to-Many)
         link = LocationSeatOfReview(
             locations_id=target_location.id,
             reviews_id=review.id
@@ -168,8 +170,46 @@ async def seed_random_content(session: AsyncSession, users_count=10, locations_c
         session.add(link)
 
     await session.commit()
-    print("✅ Рандомные данные успешно сгенерированы!")
 
+    # 5. Создаем жалобы
+    print(f"   🚩 Создаем {complaints_count} жалоб...")
+    
+    for _ in range(complaints_count):
+        author = random.choice(created_users)
+        reason = random.choice(complaint_reasons)
+        status = random.choice(complaint_statuses)
+        
+        # Случайно выбираем, на что будет жалоба (0 - Локация, 1 - Отзыв, 2 - Пользователь)
+        target_type = random.choice([0, 1])
+        
+        location_id = None
+        
+        reported_user_id = None
+
+        if target_type == 0 and created_locations:
+            location_id = random.choice(created_locations).id
+
+        elif target_type == 1 and created_users:
+            # Ищем кого-то, кроме самого себя
+            potential_targets = [u for u in created_users if u.id != author.id]
+            if potential_targets:
+                reported_user_id = random.choice(potential_targets).id
+        
+        # Если хотя бы одна цель выбрана, создаем жалобу
+        if location_id or reported_user_id:
+            complaint = Complaint(
+                author_id=author.id,
+                reason_id=reason.id,
+                status_id=status.id,
+                # С вероятностью 50% пишем рандомный текст
+                text=fake.sentence(nb_words=6) if random.choice([True, False]) else None,
+                location_id=location_id,
+                reported_user_id=reported_user_id
+            )
+            session.add(complaint)
+
+    await session.commit()
+    print("✅ Рандомные данные успешно сгенерированы!")
 
 # --- MAIN ---
 
@@ -186,14 +226,17 @@ async def main():
         await seed_simple_dict(session, Material, MATERIALS_DATA, "Материалы")
         await seed_simple_dict(session, Condition, CONDITIONS_DATA, "Состояния")
         await seed_simple_dict(session, Pollution, POLLUTIONS_DATA, "Загрязнения")
-        
+        await seed_simple_dict(session, ComplaintStatus, COMPLAINT_STATUSES_DATA, "Статусы жалоб")
+        await seed_simple_dict(session, ComplaintReason, COMPLAINT_REASONS_DATA, "Причины жалоб")
         # 2. Рандомные данные (Пользователи -> Локации -> Отзывы)
         # Можно настроить количество здесь
         await seed_random_content(
             session, 
             users_count=10, 
             locations_count=30, 
-            reviews_count=50
+            reviews_count=50,
+            complaints_count=15
+            
         )
 
     print("\n🎉 Посев завершён!")

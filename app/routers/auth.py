@@ -31,7 +31,8 @@ async def login(
             detail="Неверное имя пользователя или пароль",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
+    if user.is_banned:
+        raise HTTPException(status_code=403, detail="Ваш аккаунт заблокирован")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id), "username": user.Username}, 

@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import os
 from typing import Union
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
@@ -9,10 +10,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.admin_auth import authentication_backend # <--- Импортируем нашу логику
 from app.config import settings
 
-from sqladmin import Admin, ModelView
+from app.routers.complaint import apply_complaint_action
+from sqladmin import Admin, ModelView,action
 
 from app.map.models import (
-    User, Role, LocationSeat, Review, Picture,
+    Complaint, ComplaintReason, ComplaintStatus, User, Role, LocationSeat, Review, Picture,
     TypeOfSeat, Status, Pollution, Condition, Material,
     LocationSeatOfReview
 )
@@ -22,7 +24,8 @@ from app.routers import (
     reviews_router,
     dict_router,
     pictures_router,
-    users_router
+    users_router,
+    complaint_router,
 )
 
 
@@ -46,13 +49,92 @@ app.include_router(reviews_router,)
 app.include_router(dict_router,)
 app.include_router(pictures_router,)
 app.include_router(users_router,)
+app.include_router(complaint_router,)
 
 admin = Admin(
     app, 
     engine, 
     authentication_backend=authentication_backend 
 )
+class ComplaintAdmin(ModelView, model=Complaint):
+    name = "Жалоба"
+    name_plural = "Жалобы"
+    icon = "fa-solid fa-flag"
 
+    column_list = [
+        "id",
+        "status_ref",      
+        "reason_ref",     
+        "author",          
+        "location",         
+        "picture",         
+        "reported_user",  
+        "text",
+        "resolved_by",    
+    ]
+
+    column_searchable_list = [Complaint.id, Complaint.text]
+    
+
+    # если не хочешь, чтобы в админке вручную создавали жалобы:
+    can_create = False
+
+    @action(
+        name="approve_complaints",
+        label="Одобрить",
+        confirmation_message="Одобрить выбранные жалобы?",
+        add_in_detail=True,
+        add_in_list=True,
+    )
+    async def approve_complaints(self, request: Request):
+        """
+        Меняет статус жалоб на 'Одобрена' (2) и запускает логику из API.
+        """
+        # стандартный способ из доки sqladmin
+        pks = request.query_params.get("pks", "").split(",")  # ["1","2","3",...]
+        for pk in filter(None, pks):
+            # удобный helper от sqladmin: вернёт объект по PK и session уже подхватит engine
+            complaint: Complaint = await self.get_object_for_edit(pk)
+            if not complaint:
+                continue
+            complaint.status_id = 2
+            complaint.resolved_by_id = None  # или сюда можно пробросить id модератора, если нужно
+            # apply_complaint_action сам использует тот же session, что и self.session
+            await apply_complaint_action(complaint, self.session)
+
+        await self.session.commit()
+
+        referer = request.headers.get("Referer")
+        if referer:
+            return RedirectResponse(referer)
+        return RedirectResponse(request.url_for("admin:list", identity=self.identity))
+
+    @action(
+        name="reject_complaints",
+        label="Отклонить",
+        confirmation_message="Отклонить выбранные жалобы?",
+        add_in_detail=True,
+        add_in_list=True,
+    )
+    async def reject_complaints(self, request: Request):
+        """
+        Меняет статус жалоб на 'Отклонена' (3) без доп. действий.
+        """
+        pks = request.query_params.get("pks", "").split(",")
+        for pk in filter(None, pks):
+            complaint: Complaint = await self.get_object_for_edit(pk)
+            if not complaint:
+                continue
+            complaint.status_id = 3
+            complaint.resolved_by_id = None  # или current_admin.id, если будешь пробрасывать
+
+        await self.session.commit()
+
+        referer = request.headers.get("Referer")
+        if referer:
+            return RedirectResponse(referer)
+        return RedirectResponse(request.url_for("admin:list", identity=self.identity))
+    
 class UserAdmin(ModelView, model=User):
     name = "Пользователь"
     name_plural = "Пользователи"
@@ -92,8 +174,9 @@ class ReviewAdmin(ModelView, model=Review):
         Review.id, 
         Review.rate, 
         Review.author, 
-        Review.created_at, 
-        Review.pollution_ref 
+        Review.pollution_ref,
+        Review.condition_ref,
+        Review.material_ref
     ]
     column_sortable_list = [Review.created_at, Review.rate]
 
@@ -144,8 +227,17 @@ class LocationSeatOfReviewAdmin(ModelView, model=LocationSeatOfReview):
     icon = "fa-solid fa-link"
     column_list = [LocationSeatOfReview.id, LocationSeatOfReview.location, LocationSeatOfReview.review]
 
+class Complaint_StatusAdmin(ModelView, model=ComplaintStatus):
+    name = "Статус жалобы"
+    name_plural = "Статусы жалоб"
+    icon = "fa-solid fa-layer-group"
+    column_list = [ComplaintStatus.id, ComplaintStatus.name]
 
-
+class Complaint_ReasonAdmin(ModelView, model=ComplaintReason):
+    name = "Причина жалобы"
+    name_plural = "Причины жалоб"
+    icon = "fa-solid fa-layer-group"
+    column_list = [ComplaintReason.id, ComplaintReason.name]
 
 admin.add_view(UserAdmin)
 admin.add_view(RoleAdmin)
@@ -162,3 +254,6 @@ admin.add_view(MaterialAdmin)
 
 
 admin.add_view(LocationSeatOfReviewAdmin)
+admin.add_view(Complaint_StatusAdmin)
+admin.add_view(Complaint_ReasonAdmin)
+admin.add_view(ComplaintAdmin)
