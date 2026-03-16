@@ -132,7 +132,7 @@ class LocationSeatResponse(LocationSeatBase):
     id: int
     
     author_id: int
-
+    author: Optional[UserBase] = Field(None, exclude=True)
     reviews: List["ReviewResponse"] = [] 
     
     pictures: List[PictureResponse] = [] 

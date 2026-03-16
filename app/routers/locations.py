@@ -220,8 +220,10 @@ async def get_location_detail(
     stmt = (
         select(LocationSeat)
         .options(
+            selectinload(LocationSeat.author),
             # Подгружаем всё необходимое для LocationSeatResponse + ReviewResponse
             selectinload(LocationSeat.reviews).options(
+                 
                 selectinload(Review.location_links), # Для имени локации в отзыве (если надо)
                 selectinload(Review.author)          # Для имени автора отзыва
             ),

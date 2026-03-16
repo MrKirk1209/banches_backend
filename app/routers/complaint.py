@@ -10,9 +10,9 @@ from app.pyd import ComplaintCreate
 from app.security import get_current_admin, get_current_user
 HIDDEN_STATUS_ID = 3
 REASON_ALLOWED_TARGETS = {
-    1: ["location_id", "review_id", "picture_id"],  # Спам — всё
+    1: ["location_id", "picture_id"],  # Спам — всё
     2: ["location_id"],           # Нет лавочки — только точка
-    3: ["review_id", "location_id", "reported_user_id"],  # Оскорбление — отзыв или пользователь
+    3: [ "location_id", "reported_user_id"],  # Оскорбление — отзыв или пользователь
     4: ["picture_id"],            # Порнография — только фото
 }
 complaint_router = APIRouter(prefix="/complaints", tags=["Complaints"])
