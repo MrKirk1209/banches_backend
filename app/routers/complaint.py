@@ -1,7 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +15,7 @@ REASON_ALLOWED_TARGETS = {
     3: [ "location_id", "reported_user_id"],  # Оскорбление — отзыв или пользователь
     4: ["picture_id"],            # Порнография — только фото
 }
+PROTECTED_ROLES = {"admin"}
 complaint_router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
 
@@ -33,7 +34,7 @@ async def apply_complaint_action(complaint: Complaint, db: AsyncSession):
     
     # 3 - Оскорбление → удаляем только контент, не баним
     elif complaint.reason_id == 3:
-        await _delete_target(complaint, db)
+        await _ban_author(complaint, db)
         
     
     # 4 - Порнография → удаляем контент + баним
@@ -60,24 +61,34 @@ async def _delete_target(complaint: Complaint, db: AsyncSession):
 
 
 async def _ban_author(complaint: Complaint, db: AsyncSession):
-    """Банит автора объекта или reported_user"""
+    user = None
     
-    # Если жалоба напрямую на пользователя
     if complaint.reported_user_id:
-        user = await db.get(User, complaint.reported_user_id)
+        stmt = select(User).options(joinedload(User.role)).where(User.id == complaint.reported_user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
     
-    # Иначе находим автора контента
     elif complaint.review_id:
         review = await db.get(Review, complaint.review_id)
-        user = await db.get(User, review.author_id) if review else None
+        if review:
+            stmt = select(User).options(joinedload(User.role)).where(User.id == review.author_id)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+    
     elif complaint.picture_id:
         picture = await db.get(Picture, complaint.picture_id)
-        user = await db.get(User, picture.user_id) if picture else None
-    else:
+        if picture:
+            stmt = select(User).options(joinedload(User.role)).where(User.id == picture.user_id)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+    
+    if not user:
         return
     
-    if user:
-        user.is_banned = True
+    if user.role and user.role.role_name in PROTECTED_ROLES:
+        return
+    
+    user.is_banned = True
 
 @complaint_router.post("/")
 async def create_complaint(

@@ -4,8 +4,9 @@ from typing import Union
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine
-
+from sqlalchemy.orm import joinedload
+from app.database import engine, async_session_maker
+from sqlalchemy import select 
 from starlette.middleware.sessions import SessionMiddleware
 from app.admin_auth import authentication_backend # <--- Импортируем нашу логику
 from app.config import settings
@@ -83,32 +84,39 @@ class ComplaintAdmin(ModelView, model=Complaint):
         name="approve_complaints",
         label="Одобрить",
         confirmation_message="Одобрить выбранные жалобы?",
-        add_in_detail=True,
+        add_in_detail=False,
         add_in_list=True,
     )
     async def approve_complaints(self, request: Request):
-        """
-        Меняет статус жалоб на 'Одобрена' (2) и запускает логику из API.
-        """
-        # стандартный способ из доки sqladmin
-        pks = request.query_params.get("pks", "").split(",")  # ["1","2","3",...]
-        for pk in filter(None, pks):
-            # удобный helper от sqladmin: вернёт объект по PK и session уже подхватит engine
-            complaint: Complaint = await self.get_object_for_edit(pk)
-            if not complaint:
-                continue
-            complaint.status_id = 2
-            complaint.resolved_by_id = None  # или сюда можно пробросить id модератора, если нужно
-            # apply_complaint_action сам использует тот же session, что и self.session
-            await apply_complaint_action(complaint, self.session)
-
-        await self.session.commit()
-
+        params = request.query_params.get("pks", "")
+        pks = [pk for pk in params.split(",") if pk.strip()]
+    
+        async with async_session_maker() as session:
+            for pk in pks:
+                # Явно загружаем complaint и required user/role
+                stmt = (
+                    select(Complaint)
+                    .where(Complaint.id == int(pk))
+                    .options(
+                        joinedload(Complaint.reported_user).joinedload(User.role)
+                    )
+                )
+                result = await session.execute(stmt)
+                complaint = result.scalar_one_or_none()
+                if not complaint:
+                    continue
+                
+                complaint.status_id = 2
+                complaint.resolved_by_id = None
+                await apply_complaint_action(complaint, session)
+    
+            await session.commit()
+    
         referer = request.headers.get("Referer")
         if referer:
             return RedirectResponse(referer)
         return RedirectResponse(request.url_for("admin:list", identity=self.identity))
-
+    
     @action(
         name="reject_complaints",
         label="Отклонить",
@@ -120,15 +128,25 @@ class ComplaintAdmin(ModelView, model=Complaint):
         """
         Меняет статус жалоб на 'Отклонена' (3) без доп. действий.
         """
-        pks = request.query_params.get("pks", "").split(",")
-        for pk in filter(None, pks):
-            complaint: Complaint = await self.get_object_for_edit(pk)
-            if not complaint:
-                continue
-            complaint.status_id = 3
-            complaint.resolved_by_id = None  # или current_admin.id, если будешь пробрасывать
+        params = request.query_params.get("pks", "")
+        pks = [pk for pk in params.split(",") if pk.strip()]
 
-        await self.session.commit()
+        async with async_session_maker() as session:
+            for pk in pks:
+                stmt = (
+                    select(Complaint)
+                    .where(Complaint.id == int(pk))
+                    .options(
+                        joinedload(Complaint.reported_user).joinedload(User.role)
+                    )
+                )
+                result = await session.execute(stmt)
+                complaint = result.scalar_one_or_none()
+                if not complaint:
+                    continue
+                complaint.status_id = 3
+                complaint.resolved_by_id = None
+            await session.commit()
 
         referer = request.headers.get("Referer")
         if referer:
